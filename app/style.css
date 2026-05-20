@@ -80,3 +80,32 @@ button {
 .historico {
   margin-top: 20px;
 }
+
+.alerta {
+  margin-top: 15px;
+  padding: 15px;
+  background: #fff7ed;
+  border: 1px solid #fb923c;
+  border-radius: 12px;
+}
+
+.registro {
+  margin-top: 14px;
+  padding: 14px;
+  background: #f1f5f9;
+  border-radius: 10px;
+}
+
+.linha-item {
+  margin-top: 10px;
+  padding: 10px;
+  background: white;
+  border-radius: 8px;
+  border-left: 4px solid #2563eb;
+}
+
+.foto {
+  margin-top: 8px;
+  max-width: 100%;
+  border-radius: 8px;
+}
