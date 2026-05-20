@@ -109,3 +109,18 @@ button {
   max-width: 100%;
   border-radius: 8px;
 }
+
+.ultimo-campo {
+  margin: 10px 0;
+  padding: 10px;
+  background: #ecfdf5;
+  border-left: 4px solid #22c55e;
+  border-radius: 8px;
+}
+
+.foto {
+  margin-top: 8px;
+  max-width: 180px;
+  border-radius: 8px;
+  display: block;
+}
