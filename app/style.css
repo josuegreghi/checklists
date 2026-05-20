@@ -1,148 +1,270 @@
-body {
-  margin: 0;
-  font-family: Arial, sans-serif;
-  background: #f3f4f6;
+'use client'
+
+import { useState } from 'react'
+import { createClient } from '@supabase/supabase-js'
+import './style.css'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
+const itens = [
+  'Limpeza interna do veículo',
+  'Nível de água do radiador',
+  'Nível de óleo do motor',
+  'Luz do painel',
+  'Ruídos anormais',
+  'Vazamentos',
+  'Funcionamento do freio',
+  'Calibragem dos pneus',
+  'Estado dos pneus',
+  'Faróis',
+  'Lanternas e luz de freio',
+  'Setas',
+  'Alarme de ré',
+  'Extintor',
+  'Cinto de segurança',
+  'Documentação'
+]
+
+type UltimoItem = {
+  item: string
+  status: string
+  observacao: string | null
+  foto_url: string | null
 }
 
-.container {
-  max-width: 800px;
-  margin: auto;
-  padding: 20px;
-}
+export default function Home() {
+  const [nome, setNome] = useState('')
+  const [equipamento, setEquipamento] = useState('')
+  const [observacaoGeral, setObservacaoGeral] = useState('')
+  const [respostas, setRespostas] = useState<Record<string, string>>({})
+  const [observacoes, setObservacoes] = useState<Record<string, string>>({})
+  const [fotos, setFotos] = useState<Record<string, File | null>>({})
+  const [ultimosItens, setUltimosItens] = useState<Record<string, UltimoItem>>({})
+  const [salvando, setSalvando] = useState(false)
 
-h1 {
-  text-align: center;
-  color: #111827;
-}
+  async function buscarUltimoEquipamento(valor: string) {
+    setEquipamento(valor)
 
-.card {
-  background: white;
-  padding: 20px;
-  border-radius: 16px;
-  box-shadow: 0 4px 20px #0001;
-}
+    if (valor.length < 2) {
+      setUltimosItens({})
+      return
+    }
 
-label {
-  display: block;
-  margin-top: 15px;
-  font-weight: bold;
-}
+    const { data } = await supabase
+      .from('checklist')
+      .select(`
+        id,
+        created_at,
+        checklist_itens (
+          item,
+          status,
+          observacao,
+          foto_url
+        )
+      `)
+      .eq('equipamento_nome', valor)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
 
-input,
-textarea,
-select {
-  width: 100%;
-  padding: 12px;
-  margin-top: 6px;
-  border: 1px solid #ccc;
-  border-radius: 10px;
-  font-size: 16px;
-}
+    const mapa: Record<string, UltimoItem> = {}
 
-textarea {
-  min-height: 80px;
-}
+    if (data?.checklist_itens) {
+      data.checklist_itens.forEach((i: UltimoItem) => {
+        mapa[i.item] = i
+      })
+    }
 
-.item {
-  margin-top: 14px;
-  padding: 12px;
-  background: #f9fafb;
-  border-radius: 10px;
-}
+    setUltimosItens(mapa)
+  }
 
-button {
-  margin-top: 25px;
-  width: 100%;
-  padding: 15px;
-  border: 0;
-  border-radius: 12px;
-  background: #2563eb;
-  color: white;
-  font-size: 18px;
-  font-weight: bold;
-}
+  async function enviarFoto(item: string, checklistId: string) {
+    const arquivo = fotos[item]
+    if (!arquivo) return ''
 
-.alerta {
-  margin-top: 15px;
-  padding: 15px;
-  background: #fff7ed;
-  border: 1px solid #fb923c;
-  border-radius: 12px;
-}
+    const caminho = `checklists/${checklistId}/${Date.now()}-${arquivo.name}`
 
-.registro {
-  margin-top: 12px;
-  padding: 12px;
-  background: #f1f5f9;
-  border-radius: 10px;
-}
+    const { error } = await supabase.storage
+      .from('checklists')
+      .upload(caminho, arquivo)
 
-.historico {
-  margin-top: 20px;
-}
+    if (error) return ''
 
-.alerta {
-  margin-top: 15px;
-  padding: 15px;
-  background: #fff7ed;
-  border: 1px solid #fb923c;
-  border-radius: 12px;
-}
+    const { data } = supabase.storage
+      .from('checklists')
+      .getPublicUrl(caminho)
 
-.registro {
-  margin-top: 14px;
-  padding: 14px;
-  background: #f1f5f9;
-  border-radius: 10px;
-}
+    return data.publicUrl
+  }
 
-.linha-item {
-  margin-top: 10px;
-  padding: 10px;
-  background: white;
-  border-radius: 8px;
-  border-left: 4px solid #2563eb;
-}
+  async function salvarChecklist() {
+    if (!nome || !equipamento) {
+      alert('Preencha nome e equipamento')
+      return
+    }
 
-.foto {
-  margin-top: 8px;
-  max-width: 100%;
-  border-radius: 8px;
-}
+    setSalvando(true)
 
-.ultimo-campo {
-  margin: 10px 0;
-  padding: 10px;
-  background: #ecfdf5;
-  border-left: 4px solid #22c55e;
-  border-radius: 8px;
-}
+    const { data: checklist, error } = await supabase
+      .from('checklist')
+      .insert({
+        operador_nome: nome,
+        equipamento_nome: equipamento,
+        observacao_geral: observacaoGeral
+      })
+      .select()
+      .single()
 
-.foto {
-  margin-top: 8px;
-  max-width: 180px;
-  border-radius: 8px;
-  display: block;
-}
+    if (error || !checklist) {
+      alert('Erro ao salvar checklist')
+      setSalvando(false)
+      return
+    }
 
-.select-nao-ok {
-  background: #fee2e2;
-  border: 2px solid #dc2626;
-  color: #991b1b;
-  font-weight: bold;
-}
+    const itensSalvar = []
 
-.select-ok {
-  background: #dcfce7;
-  border: 2px solid #16a34a;
-  color: #166534;
-  font-weight: bold;
-}
+    for (const item of itens) {
+      const fotoUrl = await enviarFoto(item, checklist.id)
 
-.foto {
-  margin-top: 10px;
-  width: 100%;
-  max-width: 250px;
-  border-radius: 12px;
-  border: 2px solid #d1d5db;
+      itensSalvar.push({
+        checklist_id: checklist.id,
+        item,
+        status: respostas[item] || 'OK',
+        observacao: observacoes[item] || '',
+        foto: fotoUrl,
+        foto_url: fotoUrl
+      })
+    }
+
+    await supabase.from('checklist_itens').insert(itensSalvar)
+
+    alert('Checklist salvo com sucesso!')
+
+    setObservacaoGeral('')
+    setRespostas({})
+    setObservacoes({})
+    setFotos({})
+    setSalvando(false)
+
+    buscarUltimoEquipamento(equipamento)
+  }
+
+  return (
+    <main className="container">
+      <h1>Check-list de Frota</h1>
+
+      <section className="card">
+        <h2>Novo Check-list</h2>
+
+        <label>Nome do operador</label>
+        <input value={nome} onChange={(e) => setNome(e.target.value)} />
+
+        <label>Equipamento / Placa</label>
+        <input
+          value={equipamento}
+          onChange={(e) => buscarUltimoEquipamento(e.target.value)}
+          placeholder="Exemplo: 14800"
+        />
+
+        <label>Observação geral</label>
+        <textarea
+          value={observacaoGeral}
+          onChange={(e) => setObservacaoGeral(e.target.value)}
+        />
+
+        <h3>Itens do Check-list</h3>
+
+        {itens.map((item) => (
+          <div
+            className={
+              respostas[item] === 'NÃO OK'
+                ? 'item item-nao-ok'
+                : respostas[item] === 'OK' || !respostas[item]
+                ? 'item item-ok'
+                : 'item'
+            }
+            key={item}
+          >
+            <strong>{item}</strong>
+
+            {ultimosItens[item] && (
+              <div
+                className={
+                  ultimosItens[item].status === 'NÃO OK'
+                    ? 'ultimo-campo ultimo-nao-ok'
+                    : 'ultimo-campo'
+                }
+              >
+                <p>
+                  <b>Último status:</b> {ultimosItens[item].status}
+                </p>
+
+                <p>
+                  <b>Última observação:</b>{' '}
+                  {ultimosItens[item].observacao || 'Sem observação'}
+                </p>
+
+                {ultimosItens[item].foto_url ? (
+                  <img
+                    src={ultimosItens[item].foto_url}
+                    className="foto"
+                    alt="Foto anterior"
+                  />
+                ) : (
+                  <p>Sem foto anterior</p>
+                )}
+              </div>
+            )}
+
+            <select
+              className={
+                respostas[item] === 'NÃO OK'
+                  ? 'select-nao-ok'
+                  : respostas[item] === 'OK' || !respostas[item]
+                  ? 'select-ok'
+                  : ''
+              }
+              value={respostas[item] || 'OK'}
+              onChange={(e) =>
+                setRespostas({ ...respostas, [item]: e.target.value })
+              }
+            >
+              <option>OK</option>
+              <option>NÃO OK</option>
+              <option>NÃO SE APLICA</option>
+            </select>
+
+            <label>Observação deste item</label>
+            <textarea
+              value={observacoes[item] || ''}
+              onChange={(e) =>
+                setObservacoes({ ...observacoes, [item]: e.target.value })
+              }
+              placeholder="Digite uma observação se necessário"
+            />
+
+            <label>Foto deste item</label>
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={(e) =>
+                setFotos({
+                  ...fotos,
+                  [item]: e.target.files?.[0] || null
+                })
+              }
+            />
+          </div>
+        ))}
+
+        <button onClick={salvarChecklist} disabled={salvando}>
+          {salvando ? 'Salvando...' : 'Finalizar Check-list'}
+        </button>
+      </section>
+    </main>
+  )
 }
