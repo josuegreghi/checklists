@@ -30,6 +30,8 @@ const itens = [
 
 type Checklist = {
   id: string
+  operador_nome: string | null
+  equipamento_nome: string | null
   observacao_geral: string | null
   created_at: string
 }
@@ -41,17 +43,35 @@ export default function Home() {
   const [respostas, setRespostas] = useState<Record<string, string>>({})
   const [salvando, setSalvando] = useState(false)
   const [historico, setHistorico] = useState<Checklist[]>([])
+  const [ultimoEquipamento, setUltimoEquipamento] = useState<Checklist | null>(null)
 
   async function carregarHistorico() {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('checklist')
-      .select('id, observacao_geral, created_at')
+      .select('id, operador_nome, equipamento_nome, observacao_geral, created_at')
       .order('created_at', { ascending: false })
       .limit(10)
 
-    if (!error && data) {
-      setHistorico(data)
+    setHistorico(data || [])
+  }
+
+  async function buscarUltimoDoEquipamento(valor: string) {
+    setEquipamento(valor)
+
+    if (valor.length < 2) {
+      setUltimoEquipamento(null)
+      return
     }
+
+    const { data } = await supabase
+      .from('checklist')
+      .select('id, operador_nome, equipamento_nome, observacao_geral, created_at')
+      .ilike('equipamento_nome', valor)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    setUltimoEquipamento(data || null)
   }
 
   useEffect(() => {
@@ -69,7 +89,9 @@ export default function Home() {
     const { data: checklist, error } = await supabase
       .from('checklist')
       .insert({
-        observacao_geral: `Operador: ${nome} | Equipamento: ${equipamento} | ${observacao}`
+        operador_nome: nome,
+        equipamento_nome: equipamento,
+        observacao_geral: observacao
       })
       .select()
       .single()
@@ -94,6 +116,7 @@ export default function Home() {
     setEquipamento('')
     setObservacao('')
     setRespostas({})
+    setUltimoEquipamento(null)
     setSalvando(false)
     carregarHistorico()
   }
@@ -109,7 +132,16 @@ export default function Home() {
         <input value={nome} onChange={(e) => setNome(e.target.value)} />
 
         <label>Equipamento / Placa</label>
-        <input value={equipamento} onChange={(e) => setEquipamento(e.target.value)} />
+        <input value={equipamento} onChange={(e) => buscarUltimoDoEquipamento(e.target.value)} />
+
+        {ultimoEquipamento && (
+          <div className="alerta">
+            <h3>Último apontamento deste equipamento</h3>
+            <p><b>Data:</b> {new Date(ultimoEquipamento.created_at).toLocaleString('pt-BR')}</p>
+            <p><b>Operador:</b> {ultimoEquipamento.operador_nome}</p>
+            <p><b>Observação:</b> {ultimoEquipamento.observacao_geral || 'Sem observação'}</p>
+          </div>
+        )}
 
         <label>Observação geral</label>
         <textarea value={observacao} onChange={(e) => setObservacao(e.target.value)} />
@@ -121,9 +153,7 @@ export default function Home() {
             <strong>{item}</strong>
             <select
               value={respostas[item] || 'OK'}
-              onChange={(e) =>
-                setRespostas({ ...respostas, [item]: e.target.value })
-              }
+              onChange={(e) => setRespostas({ ...respostas, [item]: e.target.value })}
             >
               <option>OK</option>
               <option>NÃO OK</option>
@@ -138,20 +168,13 @@ export default function Home() {
       </section>
 
       <section className="card historico">
-        <div className="linha">
-          <h2>Últimos Check-lists</h2>
-          <button className="botao-menor" onClick={carregarHistorico}>
-            Atualizar
-          </button>
-        </div>
-
-        {historico.length === 0 && <p>Nenhum registro encontrado.</p>}
+        <h2>Últimos Check-lists</h2>
 
         {historico.map((registro) => (
           <div className="registro" key={registro.id}>
-            <strong>
-              {new Date(registro.created_at).toLocaleString('pt-BR')}
-            </strong>
+            <strong>{registro.equipamento_nome}</strong>
+            <p>{new Date(registro.created_at).toLocaleString('pt-BR')}</p>
+            <p>Operador: {registro.operador_nome}</p>
             <p>{registro.observacao_geral || 'Sem observação'}</p>
           </div>
         ))}
