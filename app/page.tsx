@@ -28,61 +28,76 @@ const itens = [
   'Documentação'
 ]
 
-type ItemHistorico = {
+type UltimoItem = {
   item: string
   status: string
   observacao: string | null
-  foto: string | null
-}
-
-type ChecklistHistorico = {
-  id: string
-  operador_nome: string | null
-  equipamento_nome: string | null
-  observacao_geral: string | null
-  created_at: string
-  checklist_itens: ItemHistorico[]
+  foto_url: string | null
 }
 
 export default function Home() {
   const [nome, setNome] = useState('')
   const [equipamento, setEquipamento] = useState('')
-  const [observacao, setObservacao] = useState('')
+  const [observacaoGeral, setObservacaoGeral] = useState('')
   const [respostas, setRespostas] = useState<Record<string, string>>({})
-  const [observacoesItens, setObservacoesItens] = useState<Record<string, string>>({})
+  const [observacoes, setObservacoes] = useState<Record<string, string>>({})
+  const [fotos, setFotos] = useState<Record<string, File | null>>({})
+  const [ultimosItens, setUltimosItens] = useState<Record<string, UltimoItem>>({})
   const [salvando, setSalvando] = useState(false)
-  const [historicoEquipamento, setHistoricoEquipamento] = useState<ChecklistHistorico[]>([])
 
-  async function buscarHistoricoEquipamento(valor: string) {
+  async function buscarUltimoEquipamento(valor: string) {
     setEquipamento(valor)
 
     if (valor.length < 2) {
-      setHistoricoEquipamento([])
+      setUltimosItens({})
       return
     }
 
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('checklist')
       .select(`
         id,
-        operador_nome,
-        equipamento_nome,
-        observacao_geral,
         created_at,
         checklist_itens (
           item,
           status,
           observacao,
-          foto
+          foto_url
         )
       `)
       .eq('equipamento_nome', valor)
       .order('created_at', { ascending: false })
-      .limit(5)
+      .limit(1)
+      .maybeSingle()
 
-    if (!error && data) {
-      setHistoricoEquipamento(data as ChecklistHistorico[])
+    const mapa: Record<string, UltimoItem> = {}
+
+    if (data?.checklist_itens) {
+      data.checklist_itens.forEach((i: UltimoItem) => {
+        mapa[i.item] = i
+      })
     }
+
+    setUltimosItens(mapa)
+  }
+
+  async function enviarFoto(item: string, checklistId: string) {
+    const arquivo = fotos[item]
+    if (!arquivo) return ''
+
+    const caminho = `checklists/${checklistId}/${Date.now()}-${arquivo.name}`
+
+    const { error } = await supabase.storage
+      .from('checklists')
+      .upload(caminho, arquivo)
+
+    if (error) return ''
+
+    const { data } = supabase.storage
+      .from('checklists')
+      .getPublicUrl(caminho)
+
+    return data.publicUrl
   }
 
   async function salvarChecklist() {
@@ -98,36 +113,42 @@ export default function Home() {
       .insert({
         operador_nome: nome,
         equipamento_nome: equipamento,
-        observacao_geral: observacao
+        observacao_geral: observacaoGeral
       })
       .select()
       .single()
 
-    if (error) {
+    if (error || !checklist) {
       alert('Erro ao salvar checklist')
       setSalvando(false)
       return
     }
 
-    const itensSalvar = itens.map((item) => ({
-      checklist_id: checklist.id,
-      item,
-      status: respostas[item] || 'OK',
-      observacao: observacoesItens[item] || '',
-      foto: ''
-    }))
+    const itensSalvar = []
+
+    for (const item of itens) {
+      const fotoUrl = await enviarFoto(item, checklist.id)
+
+      itensSalvar.push({
+        checklist_id: checklist.id,
+        item,
+        status: respostas[item] || 'OK',
+        observacao: observacoes[item] || '',
+        foto: fotoUrl,
+        foto_url: fotoUrl
+      })
+    }
 
     await supabase.from('checklist_itens').insert(itensSalvar)
 
     alert('Checklist salvo com sucesso!')
 
-    setNome('')
-    setObservacao('')
+    setObservacaoGeral('')
     setRespostas({})
-    setObservacoesItens({})
+    setObservacoes({})
+    setFotos({})
     setSalvando(false)
-
-    buscarHistoricoEquipamento(equipamento)
+    buscarUltimoEquipamento(equipamento)
   }
 
   return (
@@ -143,45 +164,31 @@ export default function Home() {
         <label>Equipamento / Placa</label>
         <input
           value={equipamento}
-          onChange={(e) => buscarHistoricoEquipamento(e.target.value)}
+          onChange={(e) => buscarUltimoEquipamento(e.target.value)}
           placeholder="Exemplo: 14800"
         />
 
-        {historicoEquipamento.length > 0 && (
-          <div className="alerta">
-            <h3>Últimos apontamentos do equipamento {equipamento}</h3>
-
-            {historicoEquipamento.map((registro) => (
-              <div className="registro" key={registro.id}>
-                <strong>{new Date(registro.created_at).toLocaleString('pt-BR')}</strong>
-                <p><b>Operador:</b> {registro.operador_nome}</p>
-                <p><b>Observação geral:</b> {registro.observacao_geral || 'Sem observação'}</p>
-
-                <h4>Itens apontados</h4>
-
-                {registro.checklist_itens.map((item, index) => (
-                  <div className="linha-item" key={index}>
-                    <p><b>{item.item}</b></p>
-                    <p>Status: {item.status}</p>
-                    <p>Observação: {item.observacao || 'Sem observação'}</p>
-                    {item.foto && (
-                      <img src={item.foto} className="foto" alt="Foto do apontamento" />
-                    )}
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
-
         <label>Observação geral</label>
-        <textarea value={observacao} onChange={(e) => setObservacao(e.target.value)} />
+        <textarea
+          value={observacaoGeral}
+          onChange={(e) => setObservacaoGeral(e.target.value)}
+        />
 
         <h3>Itens do Check-list</h3>
 
         {itens.map((item) => (
           <div className="item" key={item}>
             <strong>{item}</strong>
+
+            {ultimosItens[item] && (
+              <div className="ultimo-campo">
+                <p><b>Último status:</b> {ultimosItens[item].status}</p>
+                <p><b>Última observação:</b> {ultimosItens[item].observacao || 'Sem observação'}</p>
+                {ultimosItens[item].foto_url && (
+                  <img src={ultimosItens[item].foto_url} className="foto" alt="Foto anterior" />
+                )}
+              </div>
+            )}
 
             <select
               value={respostas[item] || 'OK'}
@@ -192,21 +199,27 @@ export default function Home() {
               <option>NÃO SE APLICA</option>
             </select>
 
-            {(respostas[item] === 'NÃO OK') && (
-              <>
-                <label>Observação deste item</label>
-                <textarea
-                  value={observacoesItens[item] || ''}
-                  onChange={(e) =>
-                    setObservacoesItens({
-                      ...observacoesItens,
-                      [item]: e.target.value
-                    })
-                  }
-                  placeholder="Descreva o problema encontrado"
-                />
-              </>
-            )}
+            <label>Observação deste item</label>
+            <textarea
+              value={observacoes[item] || ''}
+              onChange={(e) =>
+                setObservacoes({ ...observacoes, [item]: e.target.value })
+              }
+              placeholder="Digite uma observação se necessário"
+            />
+
+            <label>Foto deste item</label>
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={(e) =>
+                setFotos({
+                  ...fotos,
+                  [item]: e.target.files?.[0] || null
+                })
+              }
+            />
           </div>
         ))}
 
