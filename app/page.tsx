@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import './style.css'
 
@@ -28,12 +28,35 @@ const itens = [
   'Documentação'
 ]
 
+type Checklist = {
+  id: string
+  observacao_geral: string | null
+  created_at: string
+}
+
 export default function Home() {
   const [nome, setNome] = useState('')
   const [equipamento, setEquipamento] = useState('')
   const [observacao, setObservacao] = useState('')
   const [respostas, setRespostas] = useState<Record<string, string>>({})
   const [salvando, setSalvando] = useState(false)
+  const [historico, setHistorico] = useState<Checklist[]>([])
+
+  async function carregarHistorico() {
+    const { data, error } = await supabase
+      .from('checklist')
+      .select('id, observacao_geral, created_at')
+      .order('created_at', { ascending: false })
+      .limit(10)
+
+    if (!error && data) {
+      setHistorico(data)
+    }
+  }
+
+  useEffect(() => {
+    carregarHistorico()
+  }, [])
 
   async function salvarChecklist() {
     if (!nome || !equipamento) {
@@ -46,7 +69,7 @@ export default function Home() {
     const { data: checklist, error } = await supabase
       .from('checklist')
       .insert({
-        observacao_geral: observacao
+        observacao_geral: `Operador: ${nome} | Equipamento: ${equipamento} | ${observacao}`
       })
       .select()
       .single()
@@ -72,6 +95,7 @@ export default function Home() {
     setObservacao('')
     setRespostas({})
     setSalvando(false)
+    carregarHistorico()
   }
 
   return (
@@ -111,6 +135,26 @@ export default function Home() {
         <button onClick={salvarChecklist} disabled={salvando}>
           {salvando ? 'Salvando...' : 'Finalizar Check-list'}
         </button>
+      </section>
+
+      <section className="card historico">
+        <div className="linha">
+          <h2>Últimos Check-lists</h2>
+          <button className="botao-menor" onClick={carregarHistorico}>
+            Atualizar
+          </button>
+        </div>
+
+        {historico.length === 0 && <p>Nenhum registro encontrado.</p>}
+
+        {historico.map((registro) => (
+          <div className="registro" key={registro.id}>
+            <strong>
+              {new Date(registro.created_at).toLocaleString('pt-BR')}
+            </strong>
+            <p>{registro.observacao_geral || 'Sem observação'}</p>
+          </div>
+        ))}
       </section>
     </main>
   )
