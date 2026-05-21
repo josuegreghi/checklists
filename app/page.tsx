@@ -96,7 +96,10 @@ export default function Home() {
       .from('checklists')
       .upload(caminho, arquivo)
 
-    if (error) return ''
+    if (error) {
+      console.log('Erro ao enviar foto:', error)
+      return ''
+    }
 
     const { data } = supabase.storage
       .from('checklists')
@@ -140,7 +143,8 @@ export default function Home() {
         status: respostas[item] || 'OK',
         observacao: observacoes[item] || '',
         foto: fotoUrl,
-        })
+        foto_url: fotoUrl
+      })
     }
 
     await supabase.from('checklist_itens').insert(itensSalvar)
@@ -211,14 +215,12 @@ export default function Home() {
                   {ultimosItens[item].observacao || 'Sem observação'}
                 </p>
 
-                {ultimosItens[item].foto_url ? (
+                {ultimosItens[item].foto_url && (
                   <img
                     src={ultimosItens[item].foto_url}
                     className="foto"
                     alt="Foto anterior"
                   />
-                ) : (
-                  <p>Sem foto anterior</p>
                 )}
               </div>
             )}
