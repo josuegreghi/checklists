@@ -54,7 +54,7 @@ export default function Home() {
       return
     }
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('checklist')
       .select(`
         id,
@@ -72,6 +72,11 @@ export default function Home() {
       .limit(1)
       .maybeSingle()
 
+    if (error) {
+      console.log('Erro ao buscar último equipamento:', error)
+      return
+    }
+
     const mapa: Record<string, UltimoItem> = {}
 
     if (data?.checklist_itens) {
@@ -88,13 +93,20 @@ export default function Home() {
 
   async function enviarFoto(item: string, checklistId: string) {
     const arquivo = fotos[item]
-    if (!arquivo) return ''
 
-    const caminho = `checklists/${checklistId}/${Date.now()}-${arquivo.name}`
+    if (!arquivo) {
+      return ''
+    }
+
+    const nomeArquivo = arquivo.name.replace(/\s+/g, '-')
+    const caminho = `${checklistId}/${item}-${Date.now()}-${nomeArquivo}`
 
     const { error } = await supabase.storage
       .from('checklists')
-      .upload(caminho, arquivo)
+      .upload(caminho, arquivo, {
+        cacheControl: '3600',
+        upsert: false
+      })
 
     if (error) {
       console.log('Erro ao enviar foto:', error)
@@ -114,6 +126,13 @@ export default function Home() {
       return
     }
 
+    for (const item of itens) {
+      if (!respostas[item]) {
+        alert(`Selecione o status do item: ${item}`)
+        return
+      }
+    }
+
     setSalvando(true)
 
     const { data: checklist, error } = await supabase
@@ -128,6 +147,7 @@ export default function Home() {
 
     if (error || !checklist) {
       alert('Erro ao salvar checklist')
+      console.log(error)
       setSalvando(false)
       return
     }
@@ -140,14 +160,23 @@ export default function Home() {
       itensSalvar.push({
         checklist_id: checklist.id,
         item,
-        status: respostas[item] || 'OK',
+        status: respostas[item],
         observacao: observacoes[item] || '',
         foto: fotoUrl,
         foto_url: fotoUrl
       })
     }
 
-    await supabase.from('checklist_itens').insert(itensSalvar)
+    const { error: erroItens } = await supabase
+      .from('checklist_itens')
+      .insert(itensSalvar)
+
+    if (erroItens) {
+      alert('Erro ao salvar itens do checklist')
+      console.log(erroItens)
+      setSalvando(false)
+      return
+    }
 
     alert('Checklist salvo com sucesso!')
 
@@ -190,7 +219,7 @@ export default function Home() {
             className={
               respostas[item] === 'NÃO OK'
                 ? 'item item-nao-ok'
-                : respostas[item] === 'OK' || !respostas[item]
+                : respostas[item] === 'OK'
                 ? 'item item-ok'
                 : 'item'
             }
@@ -217,7 +246,7 @@ export default function Home() {
 
                 {ultimosItens[item].foto_url && (
                   <img
-                    src={ultimosItens[item].foto_url}
+                    src={`${ultimosItens[item].foto_url}?t=${Date.now()}`}
                     className="foto"
                     alt="Foto anterior"
                   />
@@ -229,15 +258,16 @@ export default function Home() {
               className={
                 respostas[item] === 'NÃO OK'
                   ? 'select-nao-ok'
-                  : respostas[item] === 'OK' || !respostas[item]
+                  : respostas[item] === 'OK'
                   ? 'select-ok'
                   : ''
               }
-              value={respostas[item] || 'OK'}
+              value={respostas[item] || ''}
               onChange={(e) =>
                 setRespostas({ ...respostas, [item]: e.target.value })
               }
             >
+              <option value="">Selecione</option>
               <option>OK</option>
               <option>NÃO OK</option>
               <option>NÃO SE APLICA</option>
