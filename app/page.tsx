@@ -346,11 +346,11 @@ export default function Home() {
             <strong>
               Item {passoAtual + 1} de {totalItens}
             </strong>
-            <span>{progresso}% concluído</span>
+            <span>{progresso} concluído</span>
           </div>
 
           <div className="barra">
-            <div className="barra-preenchida" style={{ width: `${progresso}%` }} />
+            <div className="barra-preenchida" style={{ width: `${progresso}` }} />
           </div>
         </div>
 
