@@ -135,8 +135,7 @@ export default function Home() {
         status: respostas[item] || 'OK',
         observacao: observacoes[item] || '',
         foto: fotoUrl,
-        foto_url: fotoUrl
-      })
+        })
     }
 
     await supabase.from('checklist_itens').insert(itensSalvar)
