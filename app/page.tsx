@@ -212,8 +212,10 @@ export default function Home() {
         )
       `)
       .eq('checklist.equipamento_nome', valor)
-      .eq('checklist.tipo_checklist', tipoChecklist)
-      .order('created_at', {
+      .or(`tipo_checklist.eq.${tipoChecklist},tipo_checklist.is.null`, {
+        foreignTable: 'checklist'
+      })
+    .order('created_at', {
         ascending: false,
         foreignTable: 'checklist'
       })
