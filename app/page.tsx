@@ -32,6 +32,7 @@ type UltimoItem = {
   item: string
   status: string
   observacao: string | null
+  foto: string | null
   foto_url: string | null
 }
 
@@ -62,6 +63,7 @@ export default function Home() {
           item,
           status,
           observacao,
+          foto,
           foto_url
         )
       `)
@@ -74,7 +76,10 @@ export default function Home() {
 
     if (data?.checklist_itens) {
       data.checklist_itens.forEach((i: UltimoItem) => {
-        mapa[i.item] = i
+        mapa[i.item] = {
+          ...i,
+          foto_url: i.foto_url || i.foto || ''
+        }
       })
     }
 
