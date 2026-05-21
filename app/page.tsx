@@ -93,7 +93,7 @@ export default function Home() {
 
   const itemAtual = todosItens[passoAtual]
   const totalItens = todosItens.length
-  const progresso = Math.round(((passoAtual + 1) / totalItens) * 100)
+  const progresso = Math.round(((passoAtual + 1) / totalItens) )
 
   async function buscarUltimoEquipamento(valor: string) {
     setEquipamento(valor)
