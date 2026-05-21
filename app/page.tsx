@@ -59,7 +59,13 @@ const grupos = [
   }
 ]
 
-const todosItens = grupos.flatMap((grupo) => grupo.itens)
+const todosItens = grupos.flatMap((grupo) =>
+  grupo.itens.map((item) => ({
+    item,
+    grupo: grupo.titulo,
+    descricao: grupo.descricao
+  }))
+)
 
 type UltimoItem = {
   item: string
@@ -69,6 +75,7 @@ type UltimoItem = {
   foto_url: string | null
   checklist: {
     operador_nome: string | null
+    equipamento_nome: string | null
     created_at: string
   } | null
 }
@@ -82,6 +89,11 @@ export default function Home() {
   const [fotos, setFotos] = useState<Record<string, File | null>>({})
   const [ultimosItens, setUltimosItens] = useState<Record<string, UltimoItem>>({})
   const [salvando, setSalvando] = useState(false)
+  const [passoAtual, setPassoAtual] = useState(0)
+
+  const itemAtual = todosItens[passoAtual]
+  const totalItens = todosItens.length
+  const progresso = Math.round(((passoAtual + 1) / totalItens) * 100)
 
   async function buscarUltimoEquipamento(valor: string) {
     setEquipamento(valor)
@@ -99,15 +111,18 @@ export default function Home() {
         observacao,
         foto,
         foto_url,
-        checklist (
+        checklist!inner (
           operador_nome,
           equipamento_nome,
           created_at
         )
       `)
       .eq('checklist.equipamento_nome', valor)
-      .order('created_at', { ascending: false })
-      .limit(200)
+      .order('created_at', {
+        ascending: false,
+        foreignTable: 'checklist'
+      })
+      .limit(300)
 
     if (error) {
       console.log('Erro ao buscar últimos itens:', error)
@@ -118,8 +133,6 @@ export default function Home() {
 
     if (data) {
       data.forEach((registro: any) => {
-        if (!registro.checklist) return
-
         if (!mapa[registro.item]) {
           mapa[registro.item] = {
             ...registro,
@@ -177,15 +190,51 @@ export default function Home() {
     }
   }
 
+  function validarItemAtual() {
+    const item = itemAtual.item
+
+    if (!respostas[item]) {
+      alert(`Selecione o status do item: ${item}`)
+      return false
+    }
+
+    if (respostas[item] === 'NÃO OK' && !observacoes[item]) {
+      alert(`Descreva a observação do item NÃO OK: ${item}`)
+      return false
+    }
+
+    return true
+  }
+
+  function proximoItem() {
+    if (!validarItemAtual()) return
+
+    if (passoAtual < totalItens - 1) {
+      setPassoAtual(passoAtual + 1)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
+
+  function voltarItem() {
+    if (passoAtual > 0) {
+      setPassoAtual(passoAtual - 1)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
+
   async function salvarChecklist() {
     if (!nome || !equipamento) {
       alert('Preencha nome e equipamento')
       return
     }
 
-    for (const item of todosItens) {
+    if (!validarItemAtual()) return
+
+    for (const obj of todosItens) {
+      const item = obj.item
+
       if (!respostas[item]) {
-        alert(`Selecione o status do item: ${item}`)
+        alert(`Falta preencher o item: ${item}`)
         return
       }
 
@@ -216,7 +265,8 @@ export default function Home() {
 
     const itensSalvar = []
 
-    for (const item of todosItens) {
+    for (const obj of todosItens) {
+      const item = obj.item
       const fotoUrl = await enviarFoto(item, checklist.id)
 
       itensSalvar.push({
@@ -246,6 +296,7 @@ export default function Home() {
     setRespostas({})
     setObservacoes({})
     setFotos({})
+    setPassoAtual(0)
     setSalvando(false)
 
     buscarUltimoEquipamento(equipamento)
@@ -254,10 +305,8 @@ export default function Home() {
   return (
     <main className="container">
       <div className="topo">
-        <div>
-          <h1>Check-list de Frota</h1>
-          <p>Inspeção operacional com histórico por equipamento</p>
-        </div>
+        <h1>Check-list de Frota</h1>
+        <p>Inspeção passo a passo com histórico por equipamento</p>
       </div>
 
       <section className="card dados">
@@ -291,107 +340,159 @@ export default function Home() {
         />
       </section>
 
-      {grupos.map((grupo) => (
-        <section className="card grupo" key={grupo.titulo}>
-          <div className="grupo-header">
-            <div>
-              <h2>{grupo.titulo}</h2>
-              <p>{grupo.descricao}</p>
-            </div>
+      <section className="card grupo">
+        <div className="progresso-box">
+          <div className="progresso-texto">
+            <strong>
+              Item {passoAtual + 1} de {totalItens}
+            </strong>
+            <span>{progresso}% concluído</span>
           </div>
 
-          {grupo.itens.map((item) => (
+          <div className="barra">
+            <div className="barra-preenchida" style={{ width: `${progresso}%` }} />
+          </div>
+        </div>
+
+        <div className="grupo-header">
+          <h2>{itemAtual.grupo}</h2>
+          <p>{itemAtual.descricao}</p>
+        </div>
+
+        <div
+          className={
+            respostas[itemAtual.item] === 'NÃO OK'
+              ? 'item item-nao-ok item-atual'
+              : respostas[itemAtual.item] === 'OK'
+              ? 'item item-ok item-atual'
+              : respostas[itemAtual.item] === 'NÃO SE APLICA'
+              ? 'item item-na item-atual'
+              : 'item item-atual'
+          }
+        >
+          <div className="item-titulo">
+            <strong>{itemAtual.item}</strong>
+            {respostas[itemAtual.item] === 'NÃO OK' && <span>⚠️ Atenção</span>}
+            {respostas[itemAtual.item] === 'OK' && <span>✅ OK</span>}
+            {respostas[itemAtual.item] === 'NÃO SE APLICA' && <span>➖ N/A</span>}
+          </div>
+
+          {ultimosItens[itemAtual.item] && (
             <div
               className={
-                respostas[item] === 'NÃO OK'
-                  ? 'item item-nao-ok'
-                  : respostas[item] === 'OK'
-                  ? 'item item-ok'
-                  : respostas[item] === 'NÃO SE APLICA'
-                  ? 'item item-na'
-                  : 'item'
+                ultimosItens[itemAtual.item].status === 'NÃO OK'
+                  ? 'ultimo-campo ultimo-nao-ok'
+                  : 'ultimo-campo'
               }
-              key={item}
             >
-              <div className="item-titulo">
-                <strong>{item}</strong>
-                {respostas[item] === 'NÃO OK' && <span>⚠️ Atenção</span>}
-                {respostas[item] === 'OK' && <span>✅ OK</span>}
-                {respostas[item] === 'NÃO SE APLICA' && <span>➖ N/A</span>}
-              </div>
+              <h3>Último apontamento deste item</h3>
 
-              {ultimosItens[item] && (
-                <div
-                  className={
-                    ultimosItens[item].status === 'NÃO OK'
-                      ? 'ultimo-campo ultimo-nao-ok'
-                      : 'ultimo-campo'
-                  }
-                >
-                  <p><b>Último status:</b> {ultimosItens[item].status}</p>
-                  <p><b>Última observação:</b> {ultimosItens[item].observacao || 'Sem observação'}</p>
-                  <p><b>Último operador:</b> {ultimosItens[item].checklist?.operador_nome || 'Não informado'}</p>
-                  <p>
-                    <b>Última data/hora:</b>{' '}
-                    {ultimosItens[item].checklist?.created_at
-                      ? new Date(ultimosItens[item].checklist!.created_at).toLocaleString('pt-BR')
-                      : 'Não informado'}
-                  </p>
+              <p>
+                <b>Último status:</b> {ultimosItens[itemAtual.item].status}
+              </p>
 
-                  {ultimosItens[item].foto_url && (
-                    <img
-                      src={`${ultimosItens[item].foto_url}?t=${Date.now()}`}
-                      className="foto"
-                      alt="Foto anterior"
-                    />
-                  )}
-                </div>
+              <p>
+                <b>Última observação:</b>{' '}
+                {ultimosItens[itemAtual.item].observacao || 'Sem observação'}
+              </p>
+
+              <p>
+                <b>Último operador:</b>{' '}
+                {ultimosItens[itemAtual.item].checklist?.operador_nome || 'Não informado'}
+              </p>
+
+              <p>
+                <b>Última data/hora:</b>{' '}
+                {ultimosItens[itemAtual.item].checklist?.created_at
+                  ? new Date(
+                      ultimosItens[itemAtual.item].checklist!.created_at
+                    ).toLocaleString('pt-BR')
+                  : 'Não informado'}
+              </p>
+
+              {ultimosItens[itemAtual.item].foto_url && (
+                <img
+                  src={`${ultimosItens[itemAtual.item].foto_url}?t=${Date.now()}`}
+                  className="foto"
+                  alt="Foto anterior"
+                />
               )}
-
-              <div className="opcoes">
-                {['OK', 'NÃO OK', 'NÃO SE APLICA'].map((opcao) => (
-                  <button
-                    type="button"
-                    key={opcao}
-                    className={respostas[item] === opcao ? 'opcao ativa' : 'opcao'}
-                    onClick={() =>
-                      setRespostas({ ...respostas, [item]: opcao })
-                    }
-                  >
-                    {opcao === 'OK' ? '✅ OK' : opcao === 'NÃO OK' ? '❌ NÃO OK' : '➖ N/A'}
-                  </button>
-                ))}
-              </div>
-
-              <label>Observação deste item</label>
-              <textarea
-                value={observacoes[item] || ''}
-                onChange={(e) =>
-                  setObservacoes({ ...observacoes, [item]: e.target.value })
-                }
-                placeholder="Descreva se houver alguma condição encontrada"
-              />
-
-              <label>Foto deste item</label>
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={(e) =>
-                  setFotos({
-                    ...fotos,
-                    [item]: e.target.files?.[0] || null
-                  })
-                }
-              />
             </div>
-          ))}
-        </section>
-      ))}
+          )}
 
-      <button className="finalizar" onClick={salvarChecklist} disabled={salvando}>
-        {salvando ? 'Salvando...' : 'Finalizar Check-list'}
-      </button>
+          <div className="opcoes">
+            {['OK', 'NÃO OK', 'NÃO SE APLICA'].map((opcao) => (
+              <button
+                type="button"
+                key={opcao}
+                className={
+                  respostas[itemAtual.item] === opcao ? 'opcao ativa' : 'opcao'
+                }
+                onClick={() =>
+                  setRespostas({ ...respostas, [itemAtual.item]: opcao })
+                }
+              >
+                {opcao === 'OK'
+                  ? '✅ OK'
+                  : opcao === 'NÃO OK'
+                  ? '❌ NÃO OK'
+                  : '➖ N/A'}
+              </button>
+            ))}
+          </div>
+
+          <label>Observação deste item</label>
+          <textarea
+            value={observacoes[itemAtual.item] || ''}
+            onChange={(e) =>
+              setObservacoes({
+                ...observacoes,
+                [itemAtual.item]: e.target.value
+              })
+            }
+            placeholder="Descreva se houver alguma condição encontrada"
+          />
+
+          <label>Foto deste item</label>
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={(e) =>
+              setFotos({
+                ...fotos,
+                [itemAtual.item]: e.target.files?.[0] || null
+              })
+            }
+          />
+
+          {fotos[itemAtual.item] && (
+            <p className="foto-selecionada">
+              📷 Foto selecionada: {fotos[itemAtual.item]?.name}
+            </p>
+          )}
+        </div>
+
+        <div className="navegacao">
+          <button type="button" className="botao-secundario" onClick={voltarItem}>
+            Voltar
+          </button>
+
+          {passoAtual < totalItens - 1 ? (
+            <button type="button" className="botao-proximo" onClick={proximoItem}>
+              Próximo item
+            </button>
+          ) : (
+            <button
+              className="botao-proximo"
+              onClick={salvarChecklist}
+              disabled={salvando}
+            >
+              {salvando ? 'Salvando...' : 'Finalizar Check-list'}
+            </button>
+          )}
+        </div>
+      </section>
     </main>
   )
 }
