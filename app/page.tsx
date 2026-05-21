@@ -9,24 +9,57 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-const itens = [
-  'Limpeza interna do veículo',
-  'Nível de água do radiador',
-  'Nível de óleo do motor',
-  'Luz do painel',
-  'Ruídos anormais',
-  'Vazamentos',
-  'Funcionamento do freio',
-  'Calibragem dos pneus',
-  'Estado dos pneus',
-  'Faróis',
-  'Lanternas e luz de freio',
-  'Setas',
-  'Alarme de ré',
-  'Extintor',
-  'Cinto de segurança',
-  'Documentação'
+const grupos = [
+  {
+    titulo: '🚛 Cabine, Painel e Documentos',
+    descricao: 'Condições internas, painel, segurança do operador e documentação.',
+    itens: [
+      'Limpeza interna do veículo',
+      'Luz do painel',
+      'Cinto de segurança',
+      'Documentação',
+      'Extintor'
+    ]
+  },
+  {
+    titulo: '⚙️ Motor e Vazamentos',
+    descricao: 'Verificação básica do motor, níveis e possíveis vazamentos.',
+    itens: [
+      'Nível de água do radiador',
+      'Nível de óleo do motor',
+      'Ruídos anormais',
+      'Vazamentos'
+    ]
+  },
+  {
+    titulo: '🛞 Rodas, Pneus e Fixação',
+    descricao: 'Conferência dos pneus, calibragem e fixação das rodas.',
+    itens: [
+      'Calibragem dos pneus',
+      'Estado dos pneus',
+      'Aperto das porcas de rodas'
+    ]
+  },
+  {
+    titulo: '💡 Luzes e Sinalização',
+    descricao: 'Funcionamento das luzes externas e sinalização do equipamento.',
+    itens: [
+      'Faróis',
+      'Lanternas e luz de freio',
+      'Setas',
+      'Alarme de ré'
+    ]
+  },
+  {
+    titulo: '🛑 Freios e Segurança Operacional',
+    descricao: 'Itens que impactam diretamente a segurança da operação.',
+    itens: [
+      'Funcionamento do freio'
+    ]
+  }
 ]
+
+const todosItens = grupos.flatMap((grupo) => grupo.itens)
 
 type UltimoItem = {
   item: string
@@ -34,6 +67,10 @@ type UltimoItem = {
   observacao: string | null
   foto: string | null
   foto_url: string | null
+  checklist: {
+    operador_nome: string | null
+    created_at: string
+  } | null
 }
 
 export default function Home() {
@@ -55,35 +92,39 @@ export default function Home() {
     }
 
     const { data, error } = await supabase
-      .from('checklist')
+      .from('checklist_itens')
       .select(`
-        id,
-        created_at,
-        checklist_itens (
-          item,
-          status,
-          observacao,
-          foto,
-          foto_url
+        item,
+        status,
+        observacao,
+        foto,
+        foto_url,
+        checklist (
+          operador_nome,
+          equipamento_nome,
+          created_at
         )
       `)
-      .eq('equipamento_nome', valor)
+      .eq('checklist.equipamento_nome', valor)
       .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+      .limit(200)
 
     if (error) {
-      console.log('Erro ao buscar último equipamento:', error)
+      console.log('Erro ao buscar últimos itens:', error)
       return
     }
 
     const mapa: Record<string, UltimoItem> = {}
 
-    if (data?.checklist_itens) {
-      data.checklist_itens.forEach((i: UltimoItem) => {
-        mapa[i.item] = {
-          ...i,
-          foto_url: i.foto_url || i.foto || ''
+    if (data) {
+      data.forEach((registro: any) => {
+        if (!registro.checklist) return
+
+        if (!mapa[registro.item]) {
+          mapa[registro.item] = {
+            ...registro,
+            foto_url: registro.foto_url || registro.foto || ''
+          }
         }
       })
     }
@@ -120,18 +161,14 @@ export default function Home() {
         })
 
       if (error) {
-        alert('Erro ao enviar foto. Verifique o Storage no Supabase.')
+        alert('Erro ao enviar foto.')
         console.log('ERRO STORAGE:', error)
         return ''
       }
 
       const {
         data: { publicUrl }
-      } = supabase.storage
-        .from('checklists')
-        .getPublicUrl(data.path)
-
-      console.log('URL FOTO:', publicUrl)
+      } = supabase.storage.from('checklists').getPublicUrl(data.path)
 
       return publicUrl
     } catch (e) {
@@ -146,9 +183,14 @@ export default function Home() {
       return
     }
 
-    for (const item of itens) {
+    for (const item of todosItens) {
       if (!respostas[item]) {
         alert(`Selecione o status do item: ${item}`)
+        return
+      }
+
+      if (respostas[item] === 'NÃO OK' && !observacoes[item]) {
+        alert(`Descreva a observação do item NÃO OK: ${item}`)
         return
       }
     }
@@ -174,7 +216,7 @@ export default function Home() {
 
     const itensSalvar = []
 
-    for (const item of itens) {
+    for (const item of todosItens) {
       const fotoUrl = await enviarFoto(item, checklist.id)
 
       itensSalvar.push({
@@ -211,116 +253,145 @@ export default function Home() {
 
   return (
     <main className="container">
-      <h1>Check-list de Frota</h1>
+      <div className="topo">
+        <div>
+          <h1>Check-list de Frota</h1>
+          <p>Inspeção operacional com histórico por equipamento</p>
+        </div>
+      </div>
 
-      <section className="card">
-        <h2>Novo Check-list</h2>
+      <section className="card dados">
+        <h2>Dados do Check-list</h2>
 
-        <label>Nome do operador</label>
-        <input value={nome} onChange={(e) => setNome(e.target.value)} />
+        <div className="grid">
+          <div>
+            <label>Nome do operador</label>
+            <input
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              placeholder="Digite seu nome"
+            />
+          </div>
 
-        <label>Equipamento / Placa</label>
-        <input
-          value={equipamento}
-          onChange={(e) => buscarUltimoEquipamento(e.target.value)}
-          placeholder="Exemplo: 14800"
-        />
+          <div>
+            <label>Equipamento / Placa</label>
+            <input
+              value={equipamento}
+              onChange={(e) => buscarUltimoEquipamento(e.target.value)}
+              placeholder="Exemplo: 14800"
+            />
+          </div>
+        </div>
 
         <label>Observação geral</label>
         <textarea
           value={observacaoGeral}
           onChange={(e) => setObservacaoGeral(e.target.value)}
+          placeholder="Observação geral do checklist"
         />
+      </section>
 
-        <h3>Itens do Check-list</h3>
+      {grupos.map((grupo) => (
+        <section className="card grupo" key={grupo.titulo}>
+          <div className="grupo-header">
+            <div>
+              <h2>{grupo.titulo}</h2>
+              <p>{grupo.descricao}</p>
+            </div>
+          </div>
 
-        {itens.map((item) => (
-          <div
-            className={
-              respostas[item] === 'NÃO OK'
-                ? 'item item-nao-ok'
-                : respostas[item] === 'OK'
-                ? 'item item-ok'
-                : 'item'
-            }
-            key={item}
-          >
-            <strong>{item}</strong>
-
-            {ultimosItens[item] && (
-              <div
-                className={
-                  ultimosItens[item].status === 'NÃO OK'
-                    ? 'ultimo-campo ultimo-nao-ok'
-                    : 'ultimo-campo'
-                }
-              >
-                <p>
-                  <b>Último status:</b> {ultimosItens[item].status}
-                </p>
-
-                <p>
-                  <b>Última observação:</b>{' '}
-                  {ultimosItens[item].observacao || 'Sem observação'}
-                </p>
-
-                {ultimosItens[item].foto_url && (
-                  <img
-                    src={`${ultimosItens[item].foto_url}?t=${Date.now()}`}
-                    className="foto"
-                    alt="Foto anterior"
-                  />
-                )}
-              </div>
-            )}
-
-            <select
+          {grupo.itens.map((item) => (
+            <div
               className={
                 respostas[item] === 'NÃO OK'
-                  ? 'select-nao-ok'
+                  ? 'item item-nao-ok'
                   : respostas[item] === 'OK'
-                  ? 'select-ok'
-                  : ''
+                  ? 'item item-ok'
+                  : respostas[item] === 'NÃO SE APLICA'
+                  ? 'item item-na'
+                  : 'item'
               }
-              value={respostas[item] || ''}
-              onChange={(e) =>
-                setRespostas({ ...respostas, [item]: e.target.value })
-              }
+              key={item}
             >
-              <option value="">Selecione</option>
-              <option>OK</option>
-              <option>NÃO OK</option>
-              <option>NÃO SE APLICA</option>
-            </select>
+              <div className="item-titulo">
+                <strong>{item}</strong>
+                {respostas[item] === 'NÃO OK' && <span>⚠️ Atenção</span>}
+                {respostas[item] === 'OK' && <span>✅ OK</span>}
+                {respostas[item] === 'NÃO SE APLICA' && <span>➖ N/A</span>}
+              </div>
 
-            <label>Observação deste item</label>
-            <textarea
-              value={observacoes[item] || ''}
-              onChange={(e) =>
-                setObservacoes({ ...observacoes, [item]: e.target.value })
-              }
-              placeholder="Digite uma observação se necessário"
-            />
+              {ultimosItens[item] && (
+                <div
+                  className={
+                    ultimosItens[item].status === 'NÃO OK'
+                      ? 'ultimo-campo ultimo-nao-ok'
+                      : 'ultimo-campo'
+                  }
+                >
+                  <p><b>Último status:</b> {ultimosItens[item].status}</p>
+                  <p><b>Última observação:</b> {ultimosItens[item].observacao || 'Sem observação'}</p>
+                  <p><b>Último operador:</b> {ultimosItens[item].checklist?.operador_nome || 'Não informado'}</p>
+                  <p>
+                    <b>Última data/hora:</b>{' '}
+                    {ultimosItens[item].checklist?.created_at
+                      ? new Date(ultimosItens[item].checklist!.created_at).toLocaleString('pt-BR')
+                      : 'Não informado'}
+                  </p>
 
-            <label>Foto deste item</label>
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={(e) =>
-                setFotos({
-                  ...fotos,
-                  [item]: e.target.files?.[0] || null
-                })
-              }
-            />
-          </div>
-        ))}
+                  {ultimosItens[item].foto_url && (
+                    <img
+                      src={`${ultimosItens[item].foto_url}?t=${Date.now()}`}
+                      className="foto"
+                      alt="Foto anterior"
+                    />
+                  )}
+                </div>
+              )}
 
-        <button onClick={salvarChecklist} disabled={salvando}>
-          {salvando ? 'Salvando...' : 'Finalizar Check-list'}
-        </button>
-      </section>
+              <div className="opcoes">
+                {['OK', 'NÃO OK', 'NÃO SE APLICA'].map((opcao) => (
+                  <button
+                    type="button"
+                    key={opcao}
+                    className={respostas[item] === opcao ? 'opcao ativa' : 'opcao'}
+                    onClick={() =>
+                      setRespostas({ ...respostas, [item]: opcao })
+                    }
+                  >
+                    {opcao === 'OK' ? '✅ OK' : opcao === 'NÃO OK' ? '❌ NÃO OK' : '➖ N/A'}
+                  </button>
+                ))}
+              </div>
+
+              <label>Observação deste item</label>
+              <textarea
+                value={observacoes[item] || ''}
+                onChange={(e) =>
+                  setObservacoes({ ...observacoes, [item]: e.target.value })
+                }
+                placeholder="Descreva se houver alguma condição encontrada"
+              />
+
+              <label>Foto deste item</label>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={(e) =>
+                  setFotos({
+                    ...fotos,
+                    [item]: e.target.files?.[0] || null
+                  })
+                }
+              />
+            </div>
+          ))}
+        </section>
+      ))}
+
+      <button className="finalizar" onClick={salvarChecklist} disabled={salvando}>
+        {salvando ? 'Salvando...' : 'Finalizar Check-list'}
+      </button>
     </main>
   )
 }
