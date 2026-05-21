@@ -406,7 +406,9 @@ export default function Home() {
                 {ultimosItens[itemAtual.item].checklist?.created_at
                   ? new Date(
                       ultimosItens[itemAtual.item].checklist!.created_at
-                    ).toLocaleString('pt-BR')
+                    ).toLocaleString('pt-BR', {
+                      timeZone: 'America/Sao_Paulo'
+                    })
                   : 'Não informado'}
               </p>
 
