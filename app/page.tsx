@@ -148,6 +148,7 @@ export default function Home() {
     setObservacoes({})
     setFotos({})
     setSalvando(false)
+
     buscarUltimoEquipamento(equipamento)
   }
 
@@ -177,22 +178,59 @@ export default function Home() {
         <h3>Itens do Check-list</h3>
 
         {itens.map((item) => (
-          <div className="item" key={item}>
+          <div
+            className={
+              respostas[item] === 'NÃO OK'
+                ? 'item item-nao-ok'
+                : respostas[item] === 'OK' || !respostas[item]
+                ? 'item item-ok'
+                : 'item'
+            }
+            key={item}
+          >
             <strong>{item}</strong>
 
             {ultimosItens[item] && (
-              <div className="ultimo-campo">
-                <p><b>Último status:</b> {ultimosItens[item].status}</p>
-                <p><b>Última observação:</b> {ultimosItens[item].observacao || 'Sem observação'}</p>
-                {ultimosItens[item].foto_url && (
-                  <img src={ultimosItens[item].foto_url} className="foto" alt="Foto anterior" />
+              <div
+                className={
+                  ultimosItens[item].status === 'NÃO OK'
+                    ? 'ultimo-campo ultimo-nao-ok'
+                    : 'ultimo-campo'
+                }
+              >
+                <p>
+                  <b>Último status:</b> {ultimosItens[item].status}
+                </p>
+
+                <p>
+                  <b>Última observação:</b>{' '}
+                  {ultimosItens[item].observacao || 'Sem observação'}
+                </p>
+
+                {ultimosItens[item].foto_url ? (
+                  <img
+                    src={ultimosItens[item].foto_url}
+                    className="foto"
+                    alt="Foto anterior"
+                  />
+                ) : (
+                  <p>Sem foto anterior</p>
                 )}
               </div>
             )}
 
             <select
+              className={
+                respostas[item] === 'NÃO OK'
+                  ? 'select-nao-ok'
+                  : respostas[item] === 'OK' || !respostas[item]
+                  ? 'select-ok'
+                  : ''
+              }
               value={respostas[item] || 'OK'}
-              onChange={(e) => setRespostas({ ...respostas, [item]: e.target.value })}
+              onChange={(e) =>
+                setRespostas({ ...respostas, [item]: e.target.value })
+              }
             >
               <option>OK</option>
               <option>NÃO OK</option>
