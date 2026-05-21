@@ -98,26 +98,46 @@ export default function Home() {
       return ''
     }
 
-    const nomeArquivo = arquivo.name.replace(/\s+/g, '-')
-    const caminho = `${checklistId}/${item}-${Date.now()}-${nomeArquivo}`
+    try {
+      const extensao = arquivo.name.split('.').pop() || 'jpg'
+      const itemLimpo = item
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9]/g, '-')
+        .toLowerCase()
 
-    const { error } = await supabase.storage
-      .from('checklists')
-      .upload(caminho, arquivo, {
-        cacheControl: '3600',
-        upsert: false
-      })
+      const nomeArquivo = `${Date.now()}-${Math.random()
+        .toString(36)
+        .substring(2)}-${itemLimpo}.${extensao}`
 
-    if (error) {
-      console.log('Erro ao enviar foto:', error)
+      const caminho = `${checklistId}/${nomeArquivo}`
+
+      const { data, error } = await supabase.storage
+        .from('checklists')
+        .upload(caminho, arquivo, {
+          cacheControl: '3600',
+          upsert: true
+        })
+
+      if (error) {
+        alert('Erro ao enviar foto. Verifique o Storage no Supabase.')
+        console.log('ERRO STORAGE:', error)
+        return ''
+      }
+
+      const {
+        data: { publicUrl }
+      } = supabase.storage
+        .from('checklists')
+        .getPublicUrl(data.path)
+
+      console.log('URL FOTO:', publicUrl)
+
+      return publicUrl
+    } catch (e) {
+      console.log('ERRO GERAL FOTO:', e)
       return ''
     }
-
-    const { data } = supabase.storage
-      .from('checklists')
-      .getPublicUrl(caminho)
-
-    return data.publicUrl
   }
 
   async function salvarChecklist() {
