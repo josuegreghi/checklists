@@ -404,11 +404,11 @@ export default function Home() {
                 <b>Última data/hora:</b>{' '}
                 {ultimosItens[itemAtual.item].checklist?.created_at
                   ? new Date(
-                      ultimosItens[itemAtual.item].checklist!.created_at
-                    ).toLocaleString('pt-BR', {
-                      timeZone: 'America/Sao_Paulo'
-                    })
-                  : 'Não informado'}
+                       new Date(
+                        ultimosItens[itemAtual.item].checklist!.created_at
+                       ).getTime() - 3 * 60 * 60 * 1000
+                    ).toLocaleString('pt-BR')
+                       : 'Não informado'}
               </p>
 
               {ultimosItens[itemAtual.item].foto_url && (
